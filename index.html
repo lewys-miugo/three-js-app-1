@@ -15,10 +15,77 @@
 
 		<div id="info">
 			<a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> physics - <a href="https://github.com/dimforge/rapier.js" target="_blank">rapier</a> vehicle controller
-			<p>WASD or Arrow keys to move</p>
-			<p>Space to brake</p>
-   			<p>R to reset</p>
+			<p>WASD or Arrow keys to move | Space to brake | R to reset</p>
 		</div>
+
+		<!-- Mobile Controls -->
+		<div id="mobile-controls">
+			<div id="left-controls">
+				<button id="btn-left" class="control-btn">◀</button>
+				<button id="btn-right" class="control-btn">▶</button>
+			</div>
+			<div id="right-controls">
+				<button id="btn-forward" class="control-btn">▲</button>
+				<button id="btn-brake" class="control-btn brake-btn">■</button>
+				<button id="btn-backward" class="control-btn">▼</button>
+				<button id="btn-reset" class="control-btn reset-btn">R</button>
+			</div>
+		</div>
+
+		<style>
+			#mobile-controls {
+				position: fixed;
+				bottom: 20px;
+				left: 0;
+				right: 0;
+				display: flex;
+				justify-content: space-between;
+				padding: 0 20px;
+				pointer-events: none;
+				z-index: 1000;
+			}
+			#left-controls, #right-controls {
+				display: flex;
+				gap: 10px;
+				pointer-events: auto;
+			}
+			#right-controls {
+				flex-wrap: wrap;
+				width: 140px;
+				justify-content: center;
+			}
+			.control-btn {
+				width: 60px;
+				height: 60px;
+				border-radius: 50%;
+				border: 3px solid rgba(255,255,255,0.8);
+				background: rgba(0,0,0,0.5);
+				color: white;
+				font-size: 24px;
+				font-weight: bold;
+				cursor: pointer;
+				touch-action: manipulation;
+				user-select: none;
+				-webkit-user-select: none;
+			}
+			.control-btn:active {
+				background: rgba(255,255,255,0.4);
+			}
+			.brake-btn {
+				background: rgba(255,0,0,0.6);
+				border-color: #ff4444;
+			}
+			.reset-btn {
+				background: rgba(0,100,255,0.6);
+				border-color: #4488ff;
+				font-size: 20px;
+			}
+			@media (min-width: 768px) {
+				#mobile-controls {
+					display: none;
+				}
+			}
+		</style>
 
 		<script type="importmap">
             {
@@ -35,13 +102,12 @@
 		<script type="module">
 
 			import * as THREE from 'three';
-			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
             import Stats from 'three/addons/libs/stats.module.js';
             import RAPIER from '@dimforge/rapier3d-compat';
 
 
 			let camera, scene, renderer, stats;
-			let world, controls;
+			let world;
 			let car, chassis, wheels, movement, vehicleController;
 
 			init();
@@ -84,30 +150,8 @@
 				document.body.appendChild( renderer.domElement );
 				renderer.setAnimationLoop( animate );
 
-				controls = new OrbitControls( camera, renderer.domElement );
-				controls.target = new THREE.Vector3( 0, 2, 0 );
-				controls.update();
-
-				const geometry = new THREE.BoxGeometry( 100, 0.5, 100 );
-				const material = new THREE.MeshStandardMaterial( { color: 0xFFFFFF } );
-			
-				const ground = new THREE.Mesh( geometry, material );
-				ground.receiveShadow = true;
-
-				ground.position.set( 0, - 0.25, - 20 );
-				ground.userData.physics = { mass: 0 };
-
-  				scene.add( ground );
-
-				new THREE.TextureLoader().load( 'textures/grid.png', function ( texture ) {
-
-					texture.wrapS = THREE.RepeatWrapping;
-					texture.wrapT = THREE.RepeatWrapping;
-					texture.repeat.set( 80, 80 );
-					ground.material.map = texture;
-					ground.material.needsUpdate = true;
-
-				} );
+				// Create F1-style circuit track
+				createTrack();
 
 				stats = new Stats();
 				document.body.appendChild( stats.dom );
@@ -116,36 +160,35 @@
 			
 				onWindowResize();
 
-				// Movement input
+				// Movement input - max speed 180, stronger brakes
 				movement = {
 					forward: 0,
 					right: 0,
 					brake: 0,
 					reset: false,
-					accelerateForce: { value: 0, min: - 30, max: 30, step: 1 },
-					brakeForce: { value: 0, min: 0, max: 1, step: 0.05 }
+					accelerateForce: { value: 0, min: - 180, max: 180, step: 3 },
+					brakeForce: { value: 0, min: 0, max: 5, step: 0.25 }
 				};
 
+				// Keyboard controls
 				window.addEventListener( 'keydown', ( event ) => {
-
-					//console.log( event.key );
 					if ( event.key === 'w' || event.key === 'ArrowUp' ) movement.forward = - 1;
 					if ( event.key === 's' || event.key === 'ArrowDown' ) movement.forward = 1;
 					if ( event.key === 'a' || event.key === 'ArrowLeft' ) movement.right = 1;
 					if ( event.key === 'd' || event.key === 'ArrowRight' ) movement.right = - 1;
 					if ( event.key === 'r' ) movement.reset = true;
 					if ( event.key === ' ' ) movement.brake = 1;
-			
 				} );
 
 				window.addEventListener( 'keyup', ( event ) => {
-
 					if ( event.key === 'w' || event.key === 's' || event.key === 'ArrowUp' || event.key === 'ArrowDown' ) movement.forward = 0;
 					if ( event.key === 'a' || event.key === 'd' || event.key === 'ArrowLeft' || event.key === 'ArrowRight' ) movement.right = 0;
 					if ( event.key === 'r' ) movement.reset = false;
 					if ( event.key === ' ' ) movement.brake = 0;
-			
 				} );
+
+				// Mobile touch controls
+				setupMobileControls();
 
 				window.addEventListener( 'resize', onWindowResize, false );
 
@@ -163,10 +206,29 @@
 					const gravity = { x: 0.0, y: -9.81, z: 0.0 };
 					world = new RAPIER.World( gravity );
 
-					// Create ground collider
-					const groundColliderDesc = RAPIER.ColliderDesc.cuboid( 50.0, 0.25, 50.0 )
-						.setTranslation( 0, -0.25, -20 );
+					// Track dimensions (must match createTrack)
+					const trackWidth = 12;
+					const straightLength = 60;
+					const curveRadius = 25;
+					const barrierHeight = 1.2;
+					const barrierWidth = 0.5;
+
+					// Create ground collider for entire track area
+					const groundColliderDesc = RAPIER.ColliderDesc.cuboid( 100.0, 0.1, 100.0 )
+						.setTranslation( 0, -0.05, 0 );
 					world.createCollider( groundColliderDesc );
+
+					// Create straight track colliders
+					const leftStraightCollider = RAPIER.ColliderDesc.cuboid( trackWidth/2, 0.1, straightLength/2 )
+						.setTranslation( -curveRadius, 0.05, 0 );
+					world.createCollider( leftStraightCollider );
+
+					const rightStraightCollider = RAPIER.ColliderDesc.cuboid( trackWidth/2, 0.1, straightLength/2 )
+						.setTranslation( curveRadius, 0.05, 0 );
+					world.createCollider( rightStraightCollider );
+
+					// Create barriers with physics
+					createTrackBarriers( trackWidth, straightLength, curveRadius, barrierHeight, barrierWidth );
 
 					createCar();
 					console.log( 'Car created with', wheels.length, 'wheels' );
@@ -178,21 +240,96 @@
 
 			function createCar( ) {
 
-				const geometry = new THREE.BoxGeometry( 2, 1, 4 );
-				const material = new THREE.MeshStandardMaterial( { color: 0xFF0000 } );
-				const mesh = new THREE.Mesh( geometry, material );
-				mesh.castShadow = true;
-				scene.add( mesh );
-				car = mesh;
+				// Create car group to hold all parts
+				car = new THREE.Group();
+				scene.add( car );
 
-				// Create rigid body for chassis
+				const bodyColor = 0xCC0000; // Red
+				const bodyMaterial = new THREE.MeshStandardMaterial( { color: bodyColor, metalness: 0.6, roughness: 0.4 } );
+				const windowMaterial = new THREE.MeshStandardMaterial( { color: 0x111111, metalness: 0.9, roughness: 0.1 } );
+
+				// Main body (lower part)
+				const bodyGeom = new THREE.BoxGeometry( 2, 0.6, 4.5 );
+				const body = new THREE.Mesh( bodyGeom, bodyMaterial );
+				body.position.y = 0.3;
+				body.castShadow = true;
+				car.add( body );
+
+				// Hood (front slope)
+				const hoodGeom = new THREE.BoxGeometry( 1.8, 0.3, 1.2 );
+				const hood = new THREE.Mesh( hoodGeom, bodyMaterial );
+				hood.position.set( 0, 0.75, -1.4 );
+				hood.castShadow = true;
+				car.add( hood );
+
+				// Trunk (rear)
+				const trunkGeom = new THREE.BoxGeometry( 1.8, 0.3, 1 );
+				const trunk = new THREE.Mesh( trunkGeom, bodyMaterial );
+				trunk.position.set( 0, 0.75, 1.5 );
+				trunk.castShadow = true;
+				car.add( trunk );
+
+				// Cabin (passenger area)
+				const cabinGeom = new THREE.BoxGeometry( 1.7, 0.7, 1.8 );
+				const cabin = new THREE.Mesh( cabinGeom, bodyMaterial );
+				cabin.position.set( 0, 1.0, 0.1 );
+				cabin.castShadow = true;
+				car.add( cabin );
+
+				// Front windshield
+				const frontWindowGeom = new THREE.BoxGeometry( 1.5, 0.5, 0.05 );
+				const frontWindow = new THREE.Mesh( frontWindowGeom, windowMaterial );
+				frontWindow.position.set( 0, 1.0, -0.75 );
+				frontWindow.rotation.x = Math.PI * 0.15;
+				car.add( frontWindow );
+
+				// Rear windshield
+				const rearWindow = new THREE.Mesh( frontWindowGeom, windowMaterial );
+				rearWindow.position.set( 0, 1.0, 0.95 );
+				rearWindow.rotation.x = -Math.PI * 0.15;
+				car.add( rearWindow );
+
+				// Side windows (left)
+				const sideWindowGeom = new THREE.BoxGeometry( 0.05, 0.45, 1.4 );
+				const leftWindow = new THREE.Mesh( sideWindowGeom, windowMaterial );
+				leftWindow.position.set( -0.86, 1.0, 0.1 );
+				car.add( leftWindow );
+
+				// Side windows (right)
+				const rightWindow = new THREE.Mesh( sideWindowGeom, windowMaterial );
+				rightWindow.position.set( 0.86, 1.0, 0.1 );
+				car.add( rightWindow );
+
+				// Headlights
+				const headlightMat = new THREE.MeshStandardMaterial( { color: 0xFFFFAA, emissive: 0xFFFF00, emissiveIntensity: 0.5 } );
+				const headlightGeom = new THREE.BoxGeometry( 0.3, 0.15, 0.05 );
+				const leftHeadlight = new THREE.Mesh( headlightGeom, headlightMat );
+				leftHeadlight.position.set( -0.6, 0.4, -2.28 );
+				car.add( leftHeadlight );
+				const rightHeadlight = new THREE.Mesh( headlightGeom, headlightMat );
+				rightHeadlight.position.set( 0.6, 0.4, -2.28 );
+				car.add( rightHeadlight );
+
+				// Taillights
+				const taillightMat = new THREE.MeshStandardMaterial( { color: 0xFF0000, emissive: 0xFF0000, emissiveIntensity: 0.3 } );
+				const leftTaillight = new THREE.Mesh( headlightGeom, taillightMat );
+				leftTaillight.position.set( -0.6, 0.4, 2.28 );
+				car.add( leftTaillight );
+				const rightTaillight = new THREE.Mesh( headlightGeom, taillightMat );
+				rightTaillight.position.set( 0.6, 0.4, 2.28 );
+				car.add( rightTaillight );
+
+				// Number plate with "LEWIS"
+				createNumberPlate( car );
+
+				// Create rigid body for chassis - start on the right straight of the track
 				const rigidBodyDesc = RAPIER.RigidBodyDesc.dynamic()
-					.setTranslation( 0, 2, 0 );
+					.setTranslation( 25, 1, 0 );
 				chassis = world.createRigidBody( rigidBodyDesc );
 
 				// Create collider for chassis
-				const colliderDesc = RAPIER.ColliderDesc.cuboid( 1, 0.5, 2 )
-					.setMass( 10 )
+				const colliderDesc = RAPIER.ColliderDesc.cuboid( 1, 0.5, 2.25 )
+					.setMass( 150 )
 					.setRestitution( 0.2 );
 				world.createCollider( colliderDesc, chassis );
 
@@ -201,13 +338,220 @@
 
 				wheels = [];
 
-				addWheel( 0, { x: - 1, y: 0, z: - 1.5 }, mesh );
-				addWheel( 1, { x: 1, y: 0, z: - 1.5 }, mesh );
-				addWheel( 2, { x: - 1, y: 0, z: 1.5 }, mesh );
-				addWheel( 3, { x: 1, y: 0, z: 1.5 }, mesh );
+				addWheel( 0, { x: - 0.9, y: -0.4, z: - 1.4 }, car );
+				addWheel( 1, { x: 0.9, y: -0.4, z: - 1.4 }, car );
+				addWheel( 2, { x: - 0.9, y: -0.4, z: 1.4 }, car );
+				addWheel( 3, { x: 0.9, y: -0.4, z: 1.4 }, car );
 
 				vehicleController.setWheelSteering( 0, Math.PI / 4 );
 				vehicleController.setWheelSteering( 1, Math.PI / 4 );
+
+			}
+
+			function createNumberPlate( carGroup ) {
+
+				// Create canvas for number plate text
+				const canvas = document.createElement( 'canvas' );
+				canvas.width = 256;
+				canvas.height = 64;
+				const ctx = canvas.getContext( '2d' );
+
+				// White background
+				ctx.fillStyle = '#FFFFFF';
+				ctx.fillRect( 0, 0, 256, 64 );
+
+				// Border
+				ctx.strokeStyle = '#000000';
+				ctx.lineWidth = 4;
+				ctx.strokeRect( 2, 2, 252, 60 );
+
+				// Text
+				ctx.fillStyle = '#000000';
+				ctx.font = 'bold 40px Arial';
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
+				ctx.fillText( 'LEWIS', 128, 32 );
+
+				// Create texture from canvas
+				const texture = new THREE.CanvasTexture( canvas );
+				const plateMaterial = new THREE.MeshStandardMaterial( { map: texture } );
+				const plateGeom = new THREE.BoxGeometry( 0.8, 0.2, 0.02 );
+
+				// Front plate
+				const frontPlate = new THREE.Mesh( plateGeom, plateMaterial );
+				frontPlate.position.set( 0, 0.25, -2.27 );
+				carGroup.add( frontPlate );
+
+				// Rear plate
+				const rearPlate = new THREE.Mesh( plateGeom, plateMaterial );
+				rearPlate.position.set( 0, 0.25, 2.27 );
+				rearPlate.rotation.y = Math.PI;
+				carGroup.add( rearPlate );
+
+			}
+
+			function createTrack() {
+
+				const trackGroup = new THREE.Group();
+				scene.add( trackGroup );
+
+				// Track dimensions
+				const trackWidth = 12; // 2 lanes, 6m each
+				const straightLength = 60;
+				const curveRadius = 25;
+				const barrierHeight = 1.2;
+				const barrierWidth = 0.5;
+
+				// Materials
+				const asphaltMaterial = new THREE.MeshStandardMaterial( {
+					color: 0x333333,
+					roughness: 0.9
+				} );
+				const lineMaterial = new THREE.MeshStandardMaterial( {
+					color: 0xFFFFFF
+				} );
+				const barrierMaterial = new THREE.MeshStandardMaterial( {
+					color: 0xFF0000
+				} );
+				const barrierWhiteMaterial = new THREE.MeshStandardMaterial( {
+					color: 0xFFFFFF
+				} );
+				const grassMaterial = new THREE.MeshStandardMaterial( {
+					color: 0x228B22
+				} );
+
+				// Create grass base
+				const grassGeom = new THREE.BoxGeometry( 200, 0.1, 200 );
+				const grass = new THREE.Mesh( grassGeom, grassMaterial );
+				grass.position.y = -0.1;
+				grass.receiveShadow = true;
+				trackGroup.add( grass );
+
+				// Straight sections
+				const straightGeom = new THREE.BoxGeometry( trackWidth, 0.2, straightLength );
+
+				// Left straight
+				const leftStraight = new THREE.Mesh( straightGeom, asphaltMaterial );
+				leftStraight.position.set( -curveRadius, 0, 0 );
+				leftStraight.receiveShadow = true;
+				trackGroup.add( leftStraight );
+
+				// Right straight
+				const rightStraight = new THREE.Mesh( straightGeom, asphaltMaterial );
+				rightStraight.position.set( curveRadius, 0, 0 );
+				rightStraight.receiveShadow = true;
+				trackGroup.add( rightStraight );
+
+				// Curved sections (using ring geometry)
+				const curveShape = new THREE.Shape();
+				curveShape.absarc( 0, 0, curveRadius + trackWidth/2, 0, Math.PI, false );
+				curveShape.absarc( 0, 0, curveRadius - trackWidth/2, Math.PI, 0, true );
+
+				const curveExtrudeSettings = { depth: 0.2, bevelEnabled: false };
+				const curveGeom = new THREE.ExtrudeGeometry( curveShape, curveExtrudeSettings );
+				curveGeom.rotateX( -Math.PI / 2 );
+
+				// Top curve
+				const topCurve = new THREE.Mesh( curveGeom, asphaltMaterial );
+				topCurve.position.set( 0, 0, -straightLength/2 );
+				topCurve.receiveShadow = true;
+				trackGroup.add( topCurve );
+
+				// Bottom curve
+				const bottomCurve = new THREE.Mesh( curveGeom, asphaltMaterial );
+				bottomCurve.position.set( 0, 0, straightLength/2 );
+				bottomCurve.rotation.y = Math.PI;
+				bottomCurve.receiveShadow = true;
+				trackGroup.add( bottomCurve );
+
+				// Center line (dashed effect with multiple segments)
+				const lineWidth = 0.15;
+				const dashLength = 3;
+				const gapLength = 2;
+				for ( let z = -straightLength/2 + 1; z < straightLength/2 - 1; z += dashLength + gapLength ) {
+					// Left straight center line
+					const leftLineGeom = new THREE.BoxGeometry( lineWidth, 0.22, dashLength );
+					const leftLine = new THREE.Mesh( leftLineGeom, lineMaterial );
+					leftLine.position.set( -curveRadius, 0, z );
+					trackGroup.add( leftLine );
+
+					// Right straight center line
+					const rightLine = new THREE.Mesh( leftLineGeom, lineMaterial );
+					rightLine.position.set( curveRadius, 0, z );
+					trackGroup.add( rightLine );
+				}
+
+				// Start/Finish line
+				const startLineGeom = new THREE.BoxGeometry( trackWidth, 0.22, 1 );
+				const startLine = new THREE.Mesh( startLineGeom, lineMaterial );
+				startLine.position.set( curveRadius, 0, 0 );
+				trackGroup.add( startLine );
+
+				// Store track params for physics barriers
+				trackGroup.userData = { trackWidth, straightLength, curveRadius, barrierHeight, barrierWidth };
+
+			}
+
+			function createTrackBarriers( trackWidth, straightLength, curveRadius, barrierHeight, barrierWidth ) {
+
+				const barrierMaterial = new THREE.MeshStandardMaterial( { color: 0xDD0000 } );
+
+				// Create barrier segments along the track
+				const segments = 40;
+
+				// Inner barriers for straights
+				createBarrierLine( -curveRadius + trackWidth/2 + barrierWidth/2, straightLength, barrierHeight, barrierWidth, barrierMaterial );
+				createBarrierLine( -curveRadius - trackWidth/2 - barrierWidth/2, straightLength, barrierHeight, barrierWidth, barrierMaterial );
+				createBarrierLine( curveRadius + trackWidth/2 + barrierWidth/2, straightLength, barrierHeight, barrierWidth, barrierMaterial );
+				createBarrierLine( curveRadius - trackWidth/2 - barrierWidth/2, straightLength, barrierHeight, barrierWidth, barrierMaterial );
+
+				// Curved barriers
+				createCurvedBarrier( curveRadius + trackWidth/2 + barrierWidth/2, -straightLength/2, segments, barrierHeight, barrierWidth, barrierMaterial, false );
+				createCurvedBarrier( curveRadius - trackWidth/2 - barrierWidth/2, -straightLength/2, segments, barrierHeight, barrierWidth, barrierMaterial, false );
+				createCurvedBarrier( curveRadius + trackWidth/2 + barrierWidth/2, straightLength/2, segments, barrierHeight, barrierWidth, barrierMaterial, true );
+				createCurvedBarrier( curveRadius - trackWidth/2 - barrierWidth/2, straightLength/2, segments, barrierHeight, barrierWidth, barrierMaterial, true );
+
+			}
+
+			function createBarrierLine( x, length, height, width, material ) {
+
+				const geom = new THREE.BoxGeometry( width, height, length );
+				const barrier = new THREE.Mesh( geom, material );
+				barrier.position.set( x, height/2, 0 );
+				barrier.castShadow = true;
+				scene.add( barrier );
+
+				// Add physics collider
+				const colliderDesc = RAPIER.ColliderDesc.cuboid( width/2, height/2, length/2 )
+					.setTranslation( x, height/2, 0 );
+				world.createCollider( colliderDesc );
+
+			}
+
+			function createCurvedBarrier( radius, zOffset, segments, height, width, material, flipSide ) {
+
+				const angleStep = Math.PI / segments;
+				const startAngle = flipSide ? 0 : Math.PI;
+
+				for ( let i = 0; i < segments; i++ ) {
+					const angle = startAngle + i * angleStep * ( flipSide ? 1 : -1 );
+					const x = Math.cos( angle ) * radius;
+					const z = zOffset + Math.sin( angle ) * radius * ( flipSide ? 1 : -1 );
+
+					const segLength = ( Math.PI * radius ) / segments;
+					const geom = new THREE.BoxGeometry( width, height, segLength );
+					const barrier = new THREE.Mesh( geom, material );
+					barrier.position.set( x, height/2, z );
+					barrier.rotation.y = -angle + Math.PI/2;
+					barrier.castShadow = true;
+					scene.add( barrier );
+
+					// Add physics collider
+					const colliderDesc = RAPIER.ColliderDesc.cuboid( width/2, height/2, segLength/2 )
+						.setTranslation( x, height/2, z )
+						.setRotation( { x: 0, y: Math.sin( (-angle + Math.PI/2) / 2 ), z: 0, w: Math.cos( (-angle + Math.PI/2) / 2 ) } );
+					world.createCollider( colliderDesc );
+				}
 
 			}
 
@@ -216,7 +560,7 @@
 				// Define wheel properties
 				const wheelRadius = 0.3;
 				const wheelWidth = 0.4;
-				const suspensionRestLength = 0.8;
+				const suspensionRestLength = 0.2; // Reduced from 0.8 for lower ground clearance
 				const wheelPosition = pos; // Position relative to chassis
 				const wheelDirection = { x: 0.0, y: - 1.0, z: 0.0 }; // Downward direction
 				const wheelAxle = { x: - 1.0, y: 0.0, z: 0.0 }; // Axle direction
@@ -289,7 +633,7 @@
 
 				if ( movement.reset ) {
 
-					chassis.setTranslation( { x: 0, y: 2, z: 0 }, true );
+					chassis.setTranslation( { x: 25, y: 1, z: 0 }, true ); // Reset to track position
 					chassis.setRotation( { x: 0, y: 0, z: 0, w: 1 }, true );
 					chassis.setLinvel( { x: 0, y: 0, z: 0 }, true );
 					chassis.setAngvel( { x: 0, y: 0, z: 0 }, true );
@@ -368,6 +712,54 @@
 
 			}
 
+			function setupMobileControls() {
+
+				const btnForward = document.getElementById( 'btn-forward' );
+				const btnBackward = document.getElementById( 'btn-backward' );
+				const btnLeft = document.getElementById( 'btn-left' );
+				const btnRight = document.getElementById( 'btn-right' );
+				const btnBrake = document.getElementById( 'btn-brake' );
+				const btnReset = document.getElementById( 'btn-reset' );
+
+				// Helper to add both touch and mouse events
+				function addControlEvents( element, onPress, onRelease ) {
+					element.addEventListener( 'mousedown', onPress );
+					element.addEventListener( 'mouseup', onRelease );
+					element.addEventListener( 'mouseleave', onRelease );
+					element.addEventListener( 'touchstart', ( e ) => { e.preventDefault(); onPress(); }, { passive: false } );
+					element.addEventListener( 'touchend', ( e ) => { e.preventDefault(); onRelease(); }, { passive: false } );
+				}
+
+				addControlEvents( btnForward,
+					() => { movement.forward = -1; },
+					() => { movement.forward = 0; }
+				);
+				addControlEvents( btnBackward,
+					() => { movement.forward = 1; },
+					() => { movement.forward = 0; }
+				);
+				addControlEvents( btnLeft,
+					() => { movement.right = 1; },
+					() => { movement.right = 0; }
+				);
+				addControlEvents( btnRight,
+					() => { movement.right = -1; },
+					() => { movement.right = 0; }
+				);
+				addControlEvents( btnBrake,
+					() => { movement.brake = 1; },
+					() => { movement.brake = 0; }
+				);
+				addControlEvents( btnReset,
+					() => { movement.reset = true; },
+					() => { movement.reset = false; }
+				);
+
+			}
+
+			// Camera follow offset
+			const cameraOffset = new THREE.Vector3( 0, 5, 12 );
+			const cameraLookOffset = new THREE.Vector3( 0, 1, 0 );
 
 			function animate() {
 
@@ -393,10 +785,24 @@
 					car.quaternion.set( rotation.x, rotation.y, rotation.z, rotation.w );
 				}
 
-				if ( controls && car ) {
+				// Third-person camera following the car
+				if ( car ) {
 
-					controls.target.copy( car.position );
-					controls.update();
+					// Get car's forward direction
+					const carDirection = new THREE.Vector3( 0, 0, 1 );
+					carDirection.applyQuaternion( car.quaternion );
+
+					// Calculate camera position behind the car
+					const targetCameraPos = car.position.clone()
+						.add( carDirection.clone().multiplyScalar( cameraOffset.z ) )
+						.add( new THREE.Vector3( 0, cameraOffset.y, 0 ) );
+
+					// Smoothly interpolate camera position
+					camera.position.lerp( targetCameraPos, 0.05 );
+
+					// Look at the car
+					const lookTarget = car.position.clone().add( cameraLookOffset );
+					camera.lookAt( lookTarget );
 
 				}
 
