@@ -133,6 +133,38 @@ A green 3D cube rotating continuously in the browser window.
 
 ---
 
+## 5b. Advanced Example: Physics-Based Vehicle Controller
+
+The project also includes an advanced demo (`index.html`) featuring a drivable car using the Rapier physics engine.
+
+### What the Example Does
+
+* Creates a 3D scene with a ground plane and lighting
+* Initializes the Rapier physics engine for realistic physics simulation
+* Renders a controllable car with chassis and four wheels
+* Implements vehicle controls using keyboard input
+
+### Controls
+
+* **W / Arrow Up** - Accelerate forward
+* **S / Arrow Down** - Reverse
+* **A / Arrow Left** - Steer left
+* **D / Arrow Right** - Steer right
+* **Space** - Brake
+* **R** - Reset car position
+
+### Key Technologies
+
+* **Three.js** - 3D rendering
+* **Rapier Physics** - Physics simulation via `RapierPhysics.js` addon
+* **OrbitControls** - Camera controls that follow the vehicle
+
+### Running the Demo
+
+Open `index.html` in a browser using a local server (e.g., VS Code Live Server).
+
+---
+
 ## 6. AI Prompt Journal
 
 ### Prompt 1
